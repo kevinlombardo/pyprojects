@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Traceroute Visualizer</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    #map {
+      height: 600px;
+      width: 100%;
+    }
+    textarea {
+      width: 100%;
+      height: 150px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Traceroute Visualizer</h1>
+  <textarea id="tracerouteInput" placeholder="Paste traceroute data here"></textarea>
+  <button id="generateMap">Generate Map</button>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.2.3/axios.min.js"></script>
+  <script>
+    const map = L.map('map').setView([20, 0], 2); // Initialize the map
+
+    // Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    document.getElementById('generateMap').addEventListener('click', async () => {
+      const rawData = document.getElementById('tracerouteInput').value;
+      const ipAddresses = extractIPs(rawData);
+
+      const tracerouteData = [];
+      for (const ip of ipAddresses) {
+        const geoData = await getGeolocation(ip);
+        if (geoData) {
+          tracerouteData.push({
+            ip: ip,
+            lat: geoData.lat,
+            lon: geoData.lon,
+            location: `${geoData.city}, ${geoData.country}`,
+          });
+        }
+      }
+
+      displayOnMap(tracerouteData);
+    });
+
+    // Extract IP addresses from traceroute data
+    function extractIPs(data) {
+      const lines = data.split('\n');
+      const ips = [];
+      lines.forEach(line => {
+        const match = line.match(/\d+\.\d+\.\d+\.\d+/);
+        if (match) ips.push(match[0]);
+      });
+      return ips;
+    }
+
+    // Fetch geolocation for an IP
+    async function getGeolocation(ip) {
+      try {
+        const response = await axios.get(`http://ip-api.com/json/${ip}`);
+        if (response.data.status === 'success') {
+          return {
+            lat: response.data.lat,
+            lon: response.data.lon,
+            city: response.data.city,
+            country: response.data.country,
+          };
+        }
+      } catch (error) {
+        console.error(`Failed to fetch geolocation for IP: ${ip}`, error);
+      }
+      return null;
+    }
+
+    // Display traceroute data on the map
+    function displayOnMap(tracerouteData) {
+      map.setView([20, 0], 2); // Reset map view
+      tracerouteData.forEach((hop, index) => {
+        const marker = L.marker([hop.lat, hop.lon]).addTo(map);
+        marker.bindPopup(`<b>Hop ${index + 1}</b><br>IP: ${hop.ip}<br>Location: ${hop.location}`);
+      });
+
+      // Draw polyline for the route
+      const route = tracerouteData.map(hop => [hop.lat, hop.lon]);
+      L.polyline(route, { color: 'blue' }).addTo(map);
+    }
+  </script>
+</body>
+</html>
